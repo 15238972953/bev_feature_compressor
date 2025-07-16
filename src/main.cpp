@@ -4,55 +4,106 @@
 #include <fstream>
 #include <eigen3/Eigen/Dense>
 
-// 从二进制文件读取矩阵
-Eigen::MatrixXf read_matrix(const std::string& filename) {
-    std::ifstream file(filename, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("无法打开文件: " + filename);
+// 读取并解析数据（配套解析函数）
+std::vector<BEVFeaturePacket> read_multi_frames(const std::string& file_path) {
+    std::ifstream in(file_path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("无法打开文件读取: " + file_path);
     }
-    
-    // 读取矩阵尺寸
-    int rows, cols;
-    file.read(reinterpret_cast<char*>(&rows), sizeof(rows));
-    file.read(reinterpret_cast<char*>(&cols), sizeof(cols));
-    
-    // 读取矩阵数据
-    Eigen::MatrixXf matrix(rows, cols);
-    file.read(reinterpret_cast<char*>(matrix.data()), rows * cols * sizeof(float));
-    
-    if (!file) {
-        throw std::runtime_error("读取文件失败: " + filename);
+
+    // 读取总帧数
+    uint32_t num_packets;
+    in.read(reinterpret_cast<char*>(&num_packets), sizeof(num_packets));
+
+    std::vector<BEVFeaturePacket> packets;
+    packets.reserve(num_packets);
+
+    // 逐帧读取
+    for (uint32_t i = 0; i < num_packets; ++i) {
+        BEVFeaturePacket packet;
+
+        // 读取帧ID和时间戳
+        in.read(reinterpret_cast<char*>(&packet.timestamp), sizeof(packet.timestamp));
+        
+        // 读取传感器上下文
+        in.read(reinterpret_cast<char*>(&packet.sensor_ctx.ego_speed), sizeof(packet.sensor_ctx.ego_speed));
+        in.read(reinterpret_cast<char*>(&packet.sensor_ctx.health), sizeof(packet.sensor_ctx.health));
+        in.read(reinterpret_cast<char*>(packet.sensor_ctx.ego_pose.data()), 
+                  packet.sensor_ctx.ego_pose.size() * sizeof(float));
+        
+        // 读取特征元数据
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.rows), sizeof(packet.feature_meta.rows));
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.cols), sizeof(packet.feature_meta.cols));
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.value_min), sizeof(packet.feature_meta.value_min));
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.value_max), sizeof(packet.feature_meta.value_max));
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.channel), sizeof(packet.feature_meta.channel));
+        in.read(reinterpret_cast<char*>(&packet.feature_meta.is_normalized), sizeof(packet.feature_meta.is_normalized));
+        
+        // 读取矩阵数据
+        packet.feature = Eigen::MatrixXf(packet.feature_meta.rows, packet.feature_meta.cols);
+        size_t data_size = packet.feature.size() * sizeof(float);
+        in.read(reinterpret_cast<char*>(packet.feature.data()), data_size);
+
+        if (!in) {
+            throw std::runtime_error("读取第 " + std::to_string(i) + " 帧失败");
+        }
+
+        packets.push_back(std::move(packet));
     }
-    
-    return matrix;
+
+    return packets;
 }
 
 void test_compression(const std::string& filename) {
     BEVCompressor::Config config;
     config.compression_ratio = 5.0f;
+    config.block_size = 16;
+    config.lossless = false;
     
     BEVCompressor compressor(config);
+    BEVCache cache(100);  // 缓存最近100帧
 
-    // 缓存最近50帧
-    BEVCache cache(10);
-    
-    // 从文件读取矩阵
-    Eigen::MatrixXf matrix = read_matrix(filename);
-    std::cout << "读取矩阵: " << matrix.rows() << "x" << matrix.cols() << std::endl;
+    // 从文件读取数据包
+    std::vector<BEVFeaturePacket> packets = read_multi_frames(filename);
+    std::cout << "读取 " << packets.size() << " 个数据包" << std::endl;
 
-    uint64_t timestamp = 523478528054;
-    
-    // 压缩并缓存
-    auto compressed = compressor.compress(matrix);
-    cache.put(timestamp, matrix);
-
-    // 从缓存读取
-    Eigen::MatrixXf retrieved;
-    if (cache.get(timestamp,retrieved)){
-        std::cout << "Cache hit! Matrix norm:" << retrieved.norm() << std::endl;
+    if (packets.empty()) {
+        std::cout << "文件中没有有效数据包" << std::endl;
+        return;
     }
+
+    // 选择第一个数据包进行测试
+    BEVFeaturePacket& test_packet = packets[0];
+    BEVCache::timestamp_t timestamp = test_packet.timestamp;
+
+    // 压缩数据包
+    std::vector<uint8_t> compressed = compressor.compress({test_packet});
+    
+    // 解压缩验证
+    std::vector<BEVFeaturePacket> decompressed = compressor.decompress(compressed);
+    
+    // 缓存压缩结果（注意：这里缓存的是压缩后的数据，而非原始数据包）
+    cache.put(timestamp, std::move(test_packet));
+
+    // 从缓存读取原始数据包（如果需要使用原始数据）
+    BEVFeaturePacket retrieved_packet;
+    if (cache.get(timestamp, retrieved_packet)) {
+        std::cout << "Cache hit! 成功获取时间戳: " << timestamp << std::endl;
+    } else {
+        std::cout << "Cache miss!" << std::endl;
+    }
+
+    // 计算压缩率
+    size_t original_size = test_packet.feature.size() * sizeof(float);
+    std::cout << "原始大小: " << original_size << " 字节" << std::endl;
     std::cout << "压缩后大小: " << compressed.size() << " 字节 ("
-              << float(compressed.size()) / (matrix.size() * sizeof(float)) << "x)" << std::endl;
+              << float(compressed.size()) / original_size << "x)" << std::endl;
+
+    // 验证解压缩结果（比较范数）
+    if (!decompressed.empty() && decompressed[0].feature.size() == test_packet.feature.size()) {
+        float norm_diff = (decompressed[0].feature - test_packet.feature).norm();
+        std::cout << "解压缩误差范数: " << norm_diff << std::endl;
+    }
 }
 
 int main(int argc, char** argv) {
