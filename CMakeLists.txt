@@ -5,6 +5,9 @@ project(bev_feature_compressor LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 调试
+set(CMAKE_BUILD_TYPE Debug)
+
 include_directories(include)
 
 # 外部库
@@ -40,9 +43,9 @@ add_executable(GenerateData
 )
 
 target_include_directories(bev_cache PUBLIC
-    ${EIGEN3_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include
-    ${JSONCPP_INCLUDE_DIR}
+    ${EIGEN3_INCLUDE_DIR}
+    ${JSONCPP_INCLUDE_DIR} 
     ${ZFP_INCLUDE_DIRS}
 )
 

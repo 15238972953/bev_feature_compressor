@@ -1,6 +1,6 @@
 #include "compressor.h"
 #include <zfp.h>
-#include <eigen3/Eigen/Core>
+// #include <eigen3/Eigen/Core>
 #include <iostream>
 
 BEVCompressor::BEVCompressor(const Config& config) : config_(config) {}
@@ -16,14 +16,28 @@ std::vector<uint8_t> BEVCompressor::compress(const std::vector<BEVFeaturePacket>
                           reinterpret_cast<uint8_t*>(&num_packets + 1));
     
     // 遍历每个数据包
+    std::cout << "timestamp[0]" << packets[0].timestamp << std::endl;
     for (const auto& packet : packets) {
         const Eigen::MatrixXf& matrix = packet.feature;
+        // 打印matrix信息（调试用）
+        // std::cout << "Matrix size: " << matrix.rows() << "x" << matrix.cols() << std::endl;
+        // for (int i = 0; i < 10; ++i) {
+        //     for (int j = 0; j < 10; ++j) {
+        //         std::cout << matrix(i,j) << " ";
+        //     }
+        //     std::cout << "\n";
+        // }
         
         // 写入时间戳
+        uint64_t timestamp = static_cast<uint64_t>(packet.timestamp);
         compressed_data.insert(compressed_data.end(), 
-                              reinterpret_cast<const uint8_t*>(&packet.timestamp),
-                              reinterpret_cast<const uint8_t*>(&packet.timestamp + 1));
+                              reinterpret_cast<const uint8_t*>(&timestamp),
+                              reinterpret_cast<const uint8_t*>(&timestamp + 1));
         
+        uint16_t nums_block = matrix.rows() * matrix.cols() / ( bs * bs);
+        compressed_data.insert(compressed_data.end(), 
+                              reinterpret_cast<const uint8_t*>(&nums_block),
+                              reinterpret_cast<const uint8_t*>(&nums_block + 1));
         // 遍历所有块
         for (int i = 0; i < matrix.rows(); i += bs) {
             for (int j = 0; j < matrix.cols(); j += bs) {
@@ -34,7 +48,9 @@ std::vector<uint8_t> BEVCompressor::compress(const std::vector<BEVFeaturePacket>
                 // 使用Eigen的block()获取子矩阵视图
                 auto block = matrix.block(i, j, block_rows, block_cols);
                 auto compressed_block = compress_block(block);
-                
+                // std::cout << "compressed_block.size():" << compressed_block.size() << std::endl;
+                // throw std::runtime_error("结束调试！");
+
                 // 写入块头信息（位置+大小+行数+列数）
                 uint16_t header[4] = {
                     static_cast<uint16_t>(i), 
@@ -57,9 +73,10 @@ std::vector<uint8_t> BEVCompressor::compress(const std::vector<BEVFeaturePacket>
             }
         }
     }
-    
+    std::cout << "Compressed " << compressed_data.size() << " bytes." << std::endl;
     return compressed_data;
 }
+
 
 std::vector<uint8_t> BEVCompressor::compress_block(
     const Eigen::Ref<const Eigen::MatrixXf>& block) 
@@ -119,7 +136,7 @@ std::vector<uint8_t> BEVCompressor::compress_block(
 
     // 执行压缩（返回压缩后的块数，2D场景应为1）
     size_t compressed_blocks = zfp_compress(stream, field);
-    if (compressed_blocks != 1) {
+    if (!compressed_blocks) {
         stream_close(bit);
         zfp_stream_close(stream);
         zfp_field_free(field);
@@ -142,12 +159,14 @@ std::vector<BEVFeaturePacket> BEVCompressor::decompress(const std::vector<uint8_
     std::vector<BEVFeaturePacket> packets;
     const uint8_t* ptr = compressed.data();
     const uint8_t* end = compressed.data() + compressed.size();
+    std::cout << "Decompressing " << compressed.size() << " bytes..." << std::endl;
 
     // 读取数据包数量
     if (ptr + sizeof(uint32_t) > end) {
         throw std::runtime_error("压缩数据不完整：缺少数据包数量");
     }
     uint32_t num_packets = *reinterpret_cast<const uint32_t*>(ptr);
+    std::cout << "num_packets:" << num_packets << std::endl;
     ptr += sizeof(uint32_t);
 
     packets.reserve(num_packets);
@@ -161,38 +180,45 @@ std::vector<BEVFeaturePacket> BEVCompressor::decompress(const std::vector<uint8_
             throw std::runtime_error("压缩数据不完整：缺少时间戳");
         }
         packet.timestamp = *reinterpret_cast<const uint64_t*>(ptr);
+        std::cout << "timestamp:" << packet.timestamp << std::endl;
         ptr += sizeof(uint64_t);
 
-        // 读取传感器上下文（新增）
-        if (ptr + sizeof(float) + sizeof(SensorHealth) + 3*sizeof(float) > end) {
-            throw std::runtime_error("压缩数据不完整：缺少传感器上下文");
+        // 读取blocks的数量
+        if (ptr + sizeof(uint16_t) > end) {
+            throw std::runtime_error("压缩数据不完整：缺少block数量");
         }
-        packet.sensor_ctx.ego_speed = *reinterpret_cast<const float*>(ptr);
-        ptr += sizeof(float);
-        packet.sensor_ctx.health = *reinterpret_cast<const SensorHealth*>(ptr);
-        ptr += sizeof(SensorHealth);
-        memcpy(packet.sensor_ctx.ego_pose.data(), ptr, 3*sizeof(float));
-        ptr += 3*sizeof(float);
+        uint16_t nums_blocks = *reinterpret_cast<const uint16_t*>(ptr);
+        std::cout << "nums_blocks:" << nums_blocks << std::endl;
+        ptr += sizeof(uint16_t);
+
 
         // 初始化特征矩阵（假设所有块大小一致）
         packet.feature = Eigen::MatrixXf::Zero(256, 256);  // 需根据实际情况调整尺寸
 
+        int pdf = 0;
         // 解压缩所有块
-        while (ptr < end) {
-            // 检查块头是否完整
-            if (ptr + 8 > end) {  // 块头包含4个uint16_t
-                break;
-            }
-
+        auto ptr_tmp = ptr;
+        for (int i=0; i<nums_blocks; ++i) { // 块头包含4个uint16_t
             // 读取块头（行偏移、列偏移、块行数、压缩大小）
-            uint16_t header[4];
-            memcpy(header, ptr, 8);
-            ptr += 8;
+            // uint16_t header[4];
+            // memcpy(header, ptr, 8);
+            // ptr += 8;
 
-            int row_offset = header[0];
-            int col_offset = header[1];
-            int block_rows = header[2];
-            int block_size = header[3];  // 压缩后大小
+            // uint16_t row_offset = header[0];
+            // uint16_t col_offset = header[1];
+            // uint16_t block_rows = header[2];
+            // uint16_t block_size = header[3];  // 压缩后大小
+
+            uint16_t row_offset = *reinterpret_cast<const uint16_t*>(ptr);
+            ptr += sizeof(uint16_t);
+            uint16_t col_offset = *reinterpret_cast<const uint16_t*>(ptr);
+            ptr += sizeof(uint16_t);
+            uint16_t block_rows = *reinterpret_cast<const uint16_t*>(ptr);
+            ptr += sizeof(uint16_t);
+            uint16_t block_size = *reinterpret_cast<const uint16_t*>(ptr);
+            ptr += sizeof(uint16_t);
+            
+            // std::cout << block_rows << std::endl;
 
             // 确保指针不越界
             if (ptr + block_size > end) {
