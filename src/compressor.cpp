@@ -166,7 +166,7 @@ std::vector<BEVFeaturePacket> BEVCompressor::decompress(const std::vector<uint8_
         throw std::runtime_error("压缩数据不完整：缺少数据包数量");
     }
     uint32_t num_packets = *reinterpret_cast<const uint32_t*>(ptr);
-    std::cout << "num_packets:" << num_packets << std::endl;
+    // std::cout << "num_packets:" << num_packets << std::endl;
     ptr += sizeof(uint32_t);
 
     packets.reserve(num_packets);
@@ -180,7 +180,7 @@ std::vector<BEVFeaturePacket> BEVCompressor::decompress(const std::vector<uint8_
             throw std::runtime_error("压缩数据不完整：缺少时间戳");
         }
         packet.timestamp = *reinterpret_cast<const uint64_t*>(ptr);
-        std::cout << "timestamp:" << packet.timestamp << std::endl;
+        // std::cout << "timestamp:" << packet.timestamp << std::endl;
         ptr += sizeof(uint64_t);
 
         // 读取blocks的数量
@@ -188,27 +188,16 @@ std::vector<BEVFeaturePacket> BEVCompressor::decompress(const std::vector<uint8_
             throw std::runtime_error("压缩数据不完整：缺少block数量");
         }
         uint16_t nums_blocks = *reinterpret_cast<const uint16_t*>(ptr);
-        std::cout << "nums_blocks:" << nums_blocks << std::endl;
+        // std::cout << "nums_blocks:" << nums_blocks << std::endl;
         ptr += sizeof(uint16_t);
 
 
         // 初始化特征矩阵（假设所有块大小一致）
         packet.feature = Eigen::MatrixXf::Zero(256, 256);  // 需根据实际情况调整尺寸
 
-        int pdf = 0;
         // 解压缩所有块
-        auto ptr_tmp = ptr;
         for (int i=0; i<nums_blocks; ++i) { // 块头包含4个uint16_t
             // 读取块头（行偏移、列偏移、块行数、压缩大小）
-            // uint16_t header[4];
-            // memcpy(header, ptr, 8);
-            // ptr += 8;
-
-            // uint16_t row_offset = header[0];
-            // uint16_t col_offset = header[1];
-            // uint16_t block_rows = header[2];
-            // uint16_t block_size = header[3];  // 压缩后大小
-
             uint16_t row_offset = *reinterpret_cast<const uint16_t*>(ptr);
             ptr += sizeof(uint16_t);
             uint16_t col_offset = *reinterpret_cast<const uint16_t*>(ptr);

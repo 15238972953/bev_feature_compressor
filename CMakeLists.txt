@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 调试
-set(CMAKE_BUILD_TYPE Debug)
+# set(CMAKE_BUILD_TYPE Debug)
 
 include_directories(include)
 
@@ -24,12 +24,12 @@ find_package(zfp REQUIRED)
 
 
 # 主库目标
-add_library(bev_cache_lib SHARED
-    src/cache_system.cpp
-    src/compressor.cpp
-    src/main.cpp
-    src/utils.cpp
-)
+# add_library(bev_cache_lib SHARED
+#     src/cache_system.cpp
+#     src/compressor.cpp
+#     src/main.cpp
+#     src/utils.cpp
+# )
 
 add_executable(bev_cache 
     src/main.cpp
@@ -40,6 +40,10 @@ add_executable(bev_cache
 
 add_executable(GenerateData
     src/GenerateData.cpp
+)
+
+add_executable(test
+    test/test_others.cpp
 )
 
 target_include_directories(bev_cache PUBLIC
@@ -56,6 +60,13 @@ target_include_directories(GenerateData PUBLIC
     ${ZFP_INCLUDE_DIRS}
 )
 
+target_include_directories(test PUBLIC
+    ${EIGEN3_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+    ${JSONCPP_INCLUDE_DIR}
+    ${ZFP_INCLUDE_DIRS}
+)
+
 target_link_libraries(bev_cache PUBLIC 
     zfp::zfp
     Eigen3::Eigen
@@ -64,6 +75,13 @@ target_link_libraries(bev_cache PUBLIC
 )
 
 target_link_libraries(GenerateData PUBLIC 
+    zfp::zfp
+    Eigen3::Eigen
+    JsonCpp::JsonCpp
+    OpenMP::OpenMP_CXX
+)
+
+target_link_libraries(test PUBLIC 
     zfp::zfp
     Eigen3::Eigen
     JsonCpp::JsonCpp

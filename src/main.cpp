@@ -56,12 +56,11 @@ std::vector<BEVFeaturePacket> read_multi_frames(const std::string& file_path) {
 
 void test_compression(const std::string& filename) {
     BEVCompressor::Config config;
-    config.compression_ratio = 5.0f;
+    config.compression_ratio = 16.0f;
     config.block_size = 16;
     config.lossless = false;
     
     BEVCompressor compressor(config);
-    BEVCache cache(100);  // 缓存最近100帧
 
     // 从文件读取数据包
     std::vector<BEVFeaturePacket> packets = read_multi_frames(filename);
@@ -80,38 +79,85 @@ void test_compression(const std::string& filename) {
     // 压缩数据包
     std::vector<uint8_t> compressed = compressor.compress(packets);
     std::cout << "compressed.size():" << compressed.size() << std::endl;
+    for (int i = 0; i < 10; ++i) {
+        for (int j = 0; j < 10; ++j) {
+            // 设置固定宽度（如8字符），右对齐，保留3位小数
+            std::cout << std::right << std::setw(8) 
+                    << std::fixed << std::setprecision(3) 
+                    << packets[0].feature(i, j) << " ";
+        }
+        std::cout << "\n";
+    }
 
-    // 解压缩验证
-    std::vector<BEVFeaturePacket> decompressed = compressor.decompress(compressed);
+
+    // 打印matrix信息（调试用）
+    // std::cout << "Matrix size: " << decompressed[0].feature.rows() << "x" << decompressed[0].feature.cols() << std::endl;
+    // for (int i = 0; i < 10; ++i) {
+    //     for (int j = 0; j < 10; ++j) {
+    //         // 设置固定宽度（如8字符），右对齐，保留3位小数
+    //         std::cout << std::right << std::setw(8) 
+    //                 << std::fixed << std::setprecision(3) 
+    //                 << decompressed[0].feature(i, j) << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
 
     // std::cout << "decompressed.size():" << decompressed.size() << std::endl;
     
+    
     // 缓存压缩结果（注意：这里缓存的是压缩后的数据，而非原始数据包）
-    // cache.put(timestamp, std::move(test_packet));
+    BEVCache::BEVCacheConfig cache_config;
+    cache_config.max_cache_size = 2048; // 最多缓存2048个块
+    BEVCache cache(cache_config);
+    
+    // 将压缩数据插入缓存
+    cache.insertPackets(compressed);
+
+
+    uint64_t timestamp = static_cast<uint64_t>(packets[0].timestamp);
+    std::vector<uint8_t> retrieved_data;
+    uint16_t rows, cols;
+    bool found = cache.retrieve(timestamp, 0, 0, retrieved_data, rows, cols);
+    if (found){
+        // 解压缩验证
+        std::vector<BEVFeaturePacket> decompressed = compressor.decompress(retrieved_data);
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                // 设置固定宽度（如8字符），右对齐，保留3位小数
+                std::cout << std::right << std::setw(8) 
+                        << std::fixed << std::setprecision(3) 
+                        << decompressed[0].feature(i, j) << " ";
+            }
+            std::cout << "\n";
+        }
+    }
+    
+
+    // 输出缓存命中率
+    std::cout << "Cache hit rate: " << cache.getHitRate() << std::endl;
+    // 导出统计信息到JSON
+    std::string stats = cache.getStatsAsJSON();
+    std::cout << "Cache stats: " << stats << std::endl;
 
     // // 从缓存读取原始数据包（如果需要使用原始数据）
-    // BEVFeaturePacket retrieved_packet;
-    // if (cache.get(timestamp, retrieved_packet)) {
-    //     std::cout << "Cache hit! 成功获取时间戳: " << timestamp << std::endl;
-    // } else {
-    //     std::cout << "Cache miss!" << std::endl;
-    // }
+
 
     // test
     // size_t original_size = packets[0].feature.size();
     // std::cout << "original_size:" << original_size << std::endl;
 
-    // 计算压缩率 & 验证解压缩结果（比较范数）
+    // 计算压缩率
+    // size_t original_size = packets[0].feature.size()* sizeof(float) * packets.size();
+    // std::cout << "原始大小: " << original_size << " 字节" << std::endl;
+    // std::cout << "压缩后大小: " << compressed.size() << std::endl;
+    // std::cout << "解压缩后大小: " << decompressed[0].feature.size() * sizeof(float) * decompressed.size() << " 字节" << std::endl;
+    // std::cout <<" 字节 (" << original_size / float(compressed.size()) << "x)" << std::endl;
 
-
-        // if (!decompressed.empty() && decompressed[i].feature.size() == packets[i].feature.size()) {
-        //     float norm_diff = (decompressed[i].feature - packets[i].feature).norm();
-        //     std::cout << "解压缩误差范数: " << norm_diff << std::endl;
-        // }
-    size_t original_size = packets[0].feature.size()* sizeof(float);
-    std::cout << "原始大小: " << original_size << " 字节" << std::endl;
-    std::cout << "压缩后大小: " << compressed.size() << " 字节 ("
-                << original_size / float(compressed.size()) << "x)" << std::endl;
+    // 验证解压缩结果（比较范数）
+    // if (!decompressed.empty() && decompressed[0].feature.size() == packets[0].feature.size()) {
+    //     float norm_diff = (decompressed[0].feature - packets[0].feature).norm();
+    //     std::cout << "解压缩误差范数: " << norm_diff << std::endl;
+    // }
 }
 
 int main(int argc, char** argv) {

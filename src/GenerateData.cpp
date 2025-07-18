@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     float noise_level = 0.2f;
     const std::string output_file = "bev_test_data.bin";  // 测试数据保存路径
 
-    std::cout << "请输入文件参数：1-num_frames(default=50) 2-rows(default=256) 3-cols(default=256) 4-data_type(0-随机 1-渐变 2-稀疏,default=0) 5-noise_level(default=0.2)\n" << "输入（空格分隔，空则用默认）：" << std::endl;
+    std::cout << "请输入文件参数：1-num_frames(default=50) 2-rows(default=256) 3-cols(default=256) 4-data_type(0-随机 1-渐变 2-稀疏,default=0) 5-noise_level(default=0.2)\n" << "输入（空格分隔，直接回车则用默认值）：" << std::endl;
     
     std::string line;
     std::getline(std::cin, line);
@@ -195,6 +195,8 @@ int main(int argc, char** argv) {
     if (tokens.size() >= 3 && !tokens[2].empty()) std::istringstream(tokens[2]) >> cols;
     if (tokens.size() >= 4 && !tokens[3].empty()) std::istringstream(tokens[3]) >> data_type;
     if (tokens.size() >= 5 && !tokens[4].empty()) std::istringstream(tokens[4]) >> noise_level;
+
+    std::cout << "生成中，请稍候..." << std::endl;
 
     try {
         BEVDataGenerator generator;
