@@ -38,8 +38,6 @@ bev_feature_compressor/
 │   ├── cache_system.cpp      # 缓存系统实现
 │   ├── main.cpp              # 单元测试入口
 │   └── utils.cpp             # 工具函数实现
-├── third_party/             # 第三方库
-│   └── zfp/                 # ZFP压缩库
 ├── test/                    # 测试代码
 │   ├── test_compressor.cpp   # 压缩模块测试
 │   └── test_cache.cpp        # 缓存系统测试

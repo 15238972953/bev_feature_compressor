@@ -69,6 +69,20 @@ void print_data(const BEVFeaturePacket& packet, int len){
     }
 }
 
+
+void print_data(const Eigen::Ref<const Eigen::MatrixXf>& block, int len){
+    // 打印前len行，前len列数据
+    for (int i = 0; i < len; ++i) {
+        for (int j = 0; j < len; ++j) {
+            // 设置固定宽度（如8字符），右对齐，保留3位小数
+            std::cout << std::right << std::setw(8) 
+                    << std::fixed << std::setprecision(3) 
+                    << block(i, j) << " ";
+        }
+        std::cout << "\n";
+    }
+}
+
 void test_compression(const std::string& filename) {
     BEVCompressor::Config config;
     config.compression_ratio = 16.0f;
@@ -92,26 +106,41 @@ void test_compression(const std::string& filename) {
     // std::cout << "正在处理数据包: " << timestamp << std::endl;
 
 
-    // 缓存压缩结果（注意：这里缓存的是压缩后的数据，而非原始数据包）
+    // 缓存解压结果（注意：这里缓存的是解压缩的数据，而非压缩数据包）
     BEVCache::BEVCacheConfig cache_config;
-    cache_config.max_cache_size = 2048; // 最多缓存2048个块
+    cache_config.max_cache_size = 250; // 最多缓存250个块
     BEVCache cache(cache_config);
 
     // 存储所有压缩数据
     std::vector<uint8_t> compresseds;
-
-    for (int i = 0; i < packets.size(); i++)
+    uint64_t initial_timestamp = static_cast<uint64_t>(packets[0].timestamp);
+    uint16_t Lencompressed = 0;
+    uint16_t Frame_ID = 0;  // 帧数
+    for (Frame_ID = 0; Frame_ID < packets.size(); Frame_ID++)
     {
         // 压缩数据包
-        std::vector<uint8_t> compressed = compressor.compress(packets[i]);
+        std::vector<uint8_t> compressed = compressor.compress(packets[Frame_ID]);
+        Lencompressed = compressed.size();
         compresseds.insert(compresseds.end(), compressed.begin(), compressed.end());
-        print_data(packets[i], 10);
-        std::cout << "compresseds.size():" << compresseds.size() << " bytes." << std::endl;
+        // print_data(packets[i], 10);
+        // std::cout << "compresseds.size():" << compresseds.size() << " bytes." << std::endl;
         // 将压缩数据插入缓存
-        cache.insertPackets(compressed);
+        // cache.insertPackets(compressed);
     }
-    
-    
+    std::cout << "压缩完成，共 " << compresseds.size() << " 字节" << std::endl;
+    // 解压某一帧数据包
+    uint64_t timestamp = static_cast<uint64_t>(packets[0].timestamp);
+    std::cout << "正在解压数据包: " << timestamp << std::endl;
+
+    // std::cout << "数据包个数：" << compresseds.size() /Lencompressed << std::endl;
+    // 时间戳相减是“大错误”
+    BEVFeaturePacket decompressed1 = compressor.decompress_complete_block(compresseds, 0 * Lencompressed, Lencompressed);
+    print_data(decompressed1, 10);
+
+    // 解压某一帧第3行第二个子块数据包
+    // auto key_obj = BEVCompressor::CacheKey{timestamp, 3, 2};
+    // Eigen::MatrixXf decompressed2 = compressor.decompress_son_block(compresseds, key_obj, initial_timestamp, Lencompressed);
+    // print_data(decompressed2, 10);
 
 
 
@@ -130,30 +159,30 @@ void test_compression(const std::string& filename) {
     // std::cout << "decompressed.size():" << decompressed.size() << std::endl;
 
 
-    uint64_t timestamp = static_cast<uint64_t>(packets[6].timestamp);
-    std::vector<uint8_t> retrieved_data;
-    uint16_t rows, cols;
-    bool found = cache.retrieve(timestamp, 0, 0, retrieved_data, rows, cols);
-    if (found){
-        // 解压缩验证
-        std::vector<BEVFeaturePacket> decompressed = compressor.decompress(retrieved_data);
-        for (int i = 0; i < 10; ++i) {
-            for (int j = 0; j < 10; ++j) {
-                // 设置固定宽度（如8字符），右对齐，保留3位小数
-                std::cout << std::right << std::setw(8) 
-                        << std::fixed << std::setprecision(3) 
-                        << decompressed[0].feature(i, j) << " ";
-            }
-            std::cout << "\n";
-        }
-    }
+    // uint64_t timestamp = static_cast<uint64_t>(packets[6].timestamp);
+    // std::vector<uint8_t> retrieved_data;
+    // uint16_t rows, cols;
+    // bool found = cache.retrieve(timestamp, 0, 0, retrieved_data, rows, cols);
+    // if (found){
+    //     // 解压缩验证
+    //     std::vector<BEVFeaturePacket> decompressed = compressor.decompress(retrieved_data);
+    //     for (int i = 0; i < 10; ++i) {
+    //         for (int j = 0; j < 10; ++j) {
+    //             // 设置固定宽度（如8字符），右对齐，保留3位小数
+    //             std::cout << std::right << std::setw(8) 
+    //                     << std::fixed << std::setprecision(3) 
+    //                     << decompressed[0].feature(i, j) << " ";
+    //         }
+    //         std::cout << "\n";
+    //     }
+    // }
     
 
-    // 输出缓存命中率
-    std::cout << "Cache hit rate: " << cache.getHitRate() << std::endl;
-    // 导出统计信息到JSON
-    std::string stats = cache.getStatsAsJSON();
-    std::cout << "Cache stats: " << stats << std::endl;
+    // // 输出缓存命中率
+    // std::cout << "Cache hit rate: " << cache.getHitRate() << std::endl;
+    // // 导出统计信息到JSON
+    // std::string stats = cache.getStatsAsJSON();
+    // std::cout << "Cache stats: " << stats << std::endl;
 
     // // 从缓存读取原始数据包（如果需要使用原始数据）
 
