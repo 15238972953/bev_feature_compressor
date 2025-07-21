@@ -83,7 +83,6 @@ private:
         uint64_t timestamp;
         uint16_t x;
         uint16_t y;
-        
         bool operator==(const CacheKey& other) const {
             return timestamp == other.timestamp && x == other.x && y == other.y;
         }

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <eigen3/Eigen/Dense>
+#include <memory>
 
 // 读取并解析数据（配套解析函数）
 std::vector<BEVFeaturePacket> read_multi_frames(const std::string& file_path) {
@@ -54,6 +55,20 @@ std::vector<BEVFeaturePacket> read_multi_frames(const std::string& file_path) {
     return packets;
 }
 
+// 打印矩阵数据
+void print_data(const BEVFeaturePacket& packet, int len){
+    // 打印前len行，前len列数据
+    for (int i = 0; i < len; ++i) {
+        for (int j = 0; j < len; ++j) {
+            // 设置固定宽度（如8字符），右对齐，保留3位小数
+            std::cout << std::right << std::setw(8) 
+                    << std::fixed << std::setprecision(3) 
+                    << packet.feature(i, j) << " ";
+        }
+        std::cout << "\n";
+    }
+}
+
 void test_compression(const std::string& filename) {
     BEVCompressor::Config config;
     config.compression_ratio = 16.0f;
@@ -76,18 +91,28 @@ void test_compression(const std::string& filename) {
     // BEVCache::timestamp_t timestamp = test_packet.timestamp;
     // std::cout << "正在处理数据包: " << timestamp << std::endl;
 
-    // 压缩数据包
-    std::vector<uint8_t> compressed = compressor.compress(packets);
-    std::cout << "compressed.size():" << compressed.size() << std::endl;
-    for (int i = 0; i < 10; ++i) {
-        for (int j = 0; j < 10; ++j) {
-            // 设置固定宽度（如8字符），右对齐，保留3位小数
-            std::cout << std::right << std::setw(8) 
-                    << std::fixed << std::setprecision(3) 
-                    << packets[0].feature(i, j) << " ";
-        }
-        std::cout << "\n";
+
+    // 缓存压缩结果（注意：这里缓存的是压缩后的数据，而非原始数据包）
+    BEVCache::BEVCacheConfig cache_config;
+    cache_config.max_cache_size = 2048; // 最多缓存2048个块
+    BEVCache cache(cache_config);
+
+    // 存储所有压缩数据
+    std::vector<uint8_t> compresseds;
+
+    for (int i = 0; i < packets.size(); i++)
+    {
+        // 压缩数据包
+        std::vector<uint8_t> compressed = compressor.compress(packets[i]);
+        compresseds.insert(compresseds.end(), compressed.begin(), compressed.end());
+        print_data(packets[i], 10);
+        std::cout << "compresseds.size():" << compresseds.size() << " bytes." << std::endl;
+        // 将压缩数据插入缓存
+        cache.insertPackets(compressed);
     }
+    
+    
+
 
 
     // 打印matrix信息（调试用）
@@ -103,18 +128,9 @@ void test_compression(const std::string& filename) {
     // }
 
     // std::cout << "decompressed.size():" << decompressed.size() << std::endl;
-    
-    
-    // 缓存压缩结果（注意：这里缓存的是压缩后的数据，而非原始数据包）
-    BEVCache::BEVCacheConfig cache_config;
-    cache_config.max_cache_size = 2048; // 最多缓存2048个块
-    BEVCache cache(cache_config);
-    
-    // 将压缩数据插入缓存
-    cache.insertPackets(compressed);
 
 
-    uint64_t timestamp = static_cast<uint64_t>(packets[0].timestamp);
+    uint64_t timestamp = static_cast<uint64_t>(packets[6].timestamp);
     std::vector<uint8_t> retrieved_data;
     uint16_t rows, cols;
     bool found = cache.retrieve(timestamp, 0, 0, retrieved_data, rows, cols);

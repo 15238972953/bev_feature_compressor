@@ -5,19 +5,19 @@
 
 BEVCompressor::BEVCompressor(const Config& config) : config_(config) {}
 
-std::vector<uint8_t> BEVCompressor::compress(const std::vector<BEVFeaturePacket>& packets) {
+std::vector<uint8_t> BEVCompressor::compress(const BEVFeaturePacket& packet) {
     std::vector<uint8_t> compressed_data;
     const int bs = config_.block_size;
     
     // 写入数据包数量
-    uint32_t num_packets = packets.size();
-    compressed_data.insert(compressed_data.end(), 
-                          reinterpret_cast<uint8_t*>(&num_packets),
-                          reinterpret_cast<uint8_t*>(&num_packets + 1));
+    // uint32_t num_packets = packets.size();
+    // compressed_data.insert(compressed_data.end(), 
+    //                       reinterpret_cast<uint8_t*>(&num_packets),
+    //                       reinterpret_cast<uint8_t*>(&num_packets + 1));
     
     // 遍历每个数据包
-    std::cout << "timestamp[0]" << packets[0].timestamp << std::endl;
-    for (const auto& packet : packets) {
+    // std::cout << "timestamp[0]" << packets[0].timestamp << std::endl;
+    // for (const auto& packet : packets) {
         const Eigen::MatrixXf& matrix = packet.feature;
         // 打印matrix信息（调试用）
         // std::cout << "Matrix size: " << matrix.rows() << "x" << matrix.cols() << std::endl;
@@ -72,8 +72,8 @@ std::vector<uint8_t> BEVCompressor::compress(const std::vector<BEVFeaturePacket>
                 );
             }
         }
-    }
-    std::cout << "Compressed " << compressed_data.size() << " bytes." << std::endl;
+    // }
+    // std::cout << "Compressed " << compressed_data.size() << " bytes." << std::endl;
     return compressed_data;
 }
 

@@ -15,10 +15,25 @@ public:
         const int ZFP_MODE_DEFAULT = 1;   // 默认（有损）模式
     };
 
+    // 压缩后的数据结构体
+    struct compressor
+    {
+        int nums_packets;
+        std::vector<uint8_t> compresseds;
+    };
+
+    
+    struct BlockMeta {
+        uint64_t timestamp;          // 时间戳
+        int x, y;                    // 在BEV特征图中的块坐标
+        size_t offset;               // 压缩数据起始位置
+        size_t size;                 // 压缩数据长度
+    };
+
     explicit BEVCompressor(const Config& config);
     
     // 压缩接口：输入Eigen矩阵，输出压缩后的字节流
-    std::vector<uint8_t> compress(const std::vector<BEVFeaturePacket>& matrix);
+    std::vector<uint8_t> compress(const BEVFeaturePacket& matrix);
     
     // 解压接口：输入字节流，输出Eigen矩阵
     std::vector<BEVFeaturePacket> decompress(const std::vector<uint8_t>& compressed);

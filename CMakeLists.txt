@@ -42,10 +42,6 @@ add_executable(GenerateData
     src/GenerateData.cpp
 )
 
-add_executable(test
-    test/test_others.cpp
-)
-
 target_include_directories(bev_cache PUBLIC
     ${PROJECT_SOURCE_DIR}/include
     ${EIGEN3_INCLUDE_DIR}
@@ -60,13 +56,6 @@ target_include_directories(GenerateData PUBLIC
     ${ZFP_INCLUDE_DIRS}
 )
 
-target_include_directories(test PUBLIC
-    ${EIGEN3_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-    ${JSONCPP_INCLUDE_DIR}
-    ${ZFP_INCLUDE_DIRS}
-)
-
 target_link_libraries(bev_cache PUBLIC 
     zfp::zfp
     Eigen3::Eigen
@@ -75,13 +64,6 @@ target_link_libraries(bev_cache PUBLIC
 )
 
 target_link_libraries(GenerateData PUBLIC 
-    zfp::zfp
-    Eigen3::Eigen
-    JsonCpp::JsonCpp
-    OpenMP::OpenMP_CXX
-)
-
-target_link_libraries(test PUBLIC 
     zfp::zfp
     Eigen3::Eigen
     JsonCpp::JsonCpp

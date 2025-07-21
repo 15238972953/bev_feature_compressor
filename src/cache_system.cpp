@@ -229,7 +229,7 @@ double BEVCache::getHitRate() const {
 }
 
 std::string BEVCache::getStatsAsJSON() const {
-    std::lock_guard<std::mutex> lock(stats_mutex_);
+    // std::lock_guard<std::mutex> lock(stats_mutex_);
     
     Json::Value root;
     root["total_hits"] = static_cast<Json::UInt64>(total_hits_);
