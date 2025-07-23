@@ -85,7 +85,7 @@ void print_data(const Eigen::Ref<const Eigen::MatrixXf>& block, int len){
 
 void test_compression(const std::string& filename) {
     BEVCompressor::Config config;
-    config.compression_ratio = 16.0f;
+    config.compression_ratio = 5.0f;
     config.block_size = 16;
     config.lossless = false;
     
@@ -111,12 +111,13 @@ void test_compression(const std::string& filename) {
     cache_config.max_cache_size = 250; // 最多缓存250个块
     BEVCache cache(cache_config);
 
+    print_data(packets[0], 16);
     // 存储所有压缩数据
     std::vector<uint8_t> compresseds;
     uint64_t initial_timestamp = static_cast<uint64_t>(packets[0].timestamp);
     uint16_t Lencompressed = 0;
     uint16_t Frame_ID = 0;  // 帧数
-    for (Frame_ID = 0; Frame_ID < packets.size(); Frame_ID++)
+    for (Frame_ID = 0; Frame_ID < 1; Frame_ID++)
     {
         // 压缩数据包
         std::vector<uint8_t> compressed = compressor.compress(packets[Frame_ID]);
@@ -135,9 +136,9 @@ void test_compression(const std::string& filename) {
     // std::cout << "数据包个数：" << compresseds.size() /Lencompressed << std::endl;
     // 时间戳相减是“大错误”
     BEVFeaturePacket decompressed1 = compressor.decompress_complete_block(compresseds, 0 * Lencompressed, Lencompressed);
-    print_data(decompressed1, 10);
+    print_data(decompressed1, 16);
 
-    // 解压某一帧第3行第二个子块数据包
+    // 解压某一帧第3行第2个子块数据包
     // auto key_obj = BEVCompressor::CacheKey{timestamp, 3, 2};
     // Eigen::MatrixXf decompressed2 = compressor.decompress_son_block(compresseds, key_obj, initial_timestamp, Lencompressed);
     // print_data(decompressed2, 10);

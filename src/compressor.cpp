@@ -19,68 +19,74 @@ std::vector<uint8_t> BEVCompressor::compress(const BEVFeaturePacket& packet) {
     // 遍历每个数据包
     // std::cout << "timestamp[0]" << packets[0].timestamp << std::endl;
     // for (const auto& packet : packets) {
-        const Eigen::MatrixXf& matrix = packet.feature;
-        // 打印matrix信息（调试用）
-        // std::cout << "Matrix size: " << matrix.rows() << "x" << matrix.cols() << std::endl;
-        // for (int i = 0; i < 10; ++i) {
-        //     for (int j = 0; j < 10; ++j) {
-        //         std::cout << matrix(i,j) << " ";
-        //     }
-        //     std::cout << "\n";
-        // }
-        
-        // 写入时间戳
-        uint64_t timestamp = static_cast<uint64_t>(packet.timestamp);
-        compressed_data.insert(compressed_data.end(), 
-                              reinterpret_cast<const uint8_t*>(&timestamp),
-                              reinterpret_cast<const uint8_t*>(&timestamp + 8));
-        
-        uint16_t nums_block = matrix.rows() * matrix.cols() / ( bs * bs);
-        std::cout << "nums_block:" << nums_block << std::endl;
-        compressed_data.insert(compressed_data.end(), 
-                              reinterpret_cast<const uint8_t*>(&nums_block),
-                              reinterpret_cast<const uint8_t*>(&nums_block + 2));
-        // 遍历所有块
-        for (int i = 0; i < matrix.rows(); i += bs) {
-            for (int j = 0; j < matrix.cols(); j += bs) {
-                // 处理边缘块（如果不足block_size）
-                int block_rows = std::min<int>(bs, matrix.rows() - i);
-                int block_cols = std::min<int>(bs, matrix.cols() - j);
-                
-                // 使用Eigen的block()获取子矩阵视图
-                auto block = matrix.block(i, j, block_rows, block_cols);
-                auto compressed_block = compress_block(block);
-                // std::cout << "compressed_block.size():" << compressed_block.size() << std::endl;
-                // throw std::runtime_error("结束调试！");
-
-                // 写入块头信息（位置+大小+行数+列数）
-                uint16_t header[4] = {
-                    static_cast<uint16_t>(i), 
-                    static_cast<uint16_t>(j),
-                    static_cast<uint16_t>(block_rows),
-                    static_cast<uint16_t>(compressed_block.size())
-                };
-                compressed_data.insert(
-                    compressed_data.end(), 
-                    reinterpret_cast<uint8_t*>(header), 
-                    reinterpret_cast<uint8_t*>(header + 8)
-                );
-                
-                // 写入压缩数据
-                compressed_data.insert(
-                    compressed_data.end(), 
-                    compressed_block.begin(), 
-                    compressed_block.end()
-                );
-                BlockMeta item;
-                item.offset = compressed_data.size() - compressed_block.size() - 4 * sizeof(uint16_t); // 减去块头信息的大小
-                item.size = compressed_block.size() + 4 * sizeof(uint16_t); // 包括块头信息的大小
-                // 生成键
-                // BEVCompressor::CacheKey key = {timestamp, (uint16_t)i, (uint16_t)j};
-                // 添加到缓存映射
-                block_meta_map[CacheKey{timestamp, i, j}] = std::move(item);
+    const Eigen::MatrixXf& matrix = packet.feature;
+    // 打印matrix信息（调试用）
+    // std::cout << "Matrix size: " << matrix.rows() << "x" << matrix.cols() << std::endl;
+    // for (int i = 0; i < 10; ++i) {
+    //     for (int j = 0; j < 10; ++j) {
+    //         std::cout << matrix(i,j) << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
+    
+    // 写入时间戳
+    uint64_t timestamp = static_cast<uint64_t>(packet.timestamp);
+    compressed_data.insert(compressed_data.end(), 
+                            reinterpret_cast<const uint8_t*>(&timestamp),
+                            reinterpret_cast<const uint8_t*>(&timestamp + 1));
+    
+    uint16_t nums_block = matrix.rows() * matrix.cols() / ( bs * bs);
+    // std::cout << "nums_block:" << nums_block << std::endl;
+    compressed_data.insert(compressed_data.end(), 
+                            reinterpret_cast<const uint8_t*>(&nums_block),
+                            reinterpret_cast<const uint8_t*>(&nums_block + 1));
+    
+    int flag = 0;
+    // 遍历所有块
+    for (int i = 0; i < matrix.rows(); i += bs) {
+        for (int j = 0; j < matrix.cols(); j += bs) {
+            // 处理边缘块（如果不足block_size）
+            int block_rows = std::min<int>(bs, matrix.rows() - i);
+            int block_cols = std::min<int>(bs, matrix.cols() - j);
+            
+            // 使用Eigen的block()获取子矩阵视图
+            auto block = matrix.block(i, j, block_rows, block_cols);
+            auto compressed_block = compress_block(block);
+            
+            if(0 == flag) {
+                flag = 1;
+                std::cout << "compressed_block.size():" << compressed_block.size() << std::endl;
             }
+            // throw std::runtime_error("结束调试！");
+
+            // 写入块头信息（位置+大小+行数+列数）
+            uint16_t header[4] = {
+                static_cast<uint16_t>(i), 
+                static_cast<uint16_t>(j),
+                static_cast<uint16_t>(block_rows),
+                static_cast<uint16_t>(compressed_block.size())
+            };
+            compressed_data.insert(
+                compressed_data.end(), 
+                reinterpret_cast<uint8_t*>(header), 
+                reinterpret_cast<uint8_t*>(header + 4)
+            );
+            
+            // 写入压缩数据
+            compressed_data.insert(
+                compressed_data.end(), 
+                compressed_block.begin(), 
+                compressed_block.end()
+            );
+            BlockMeta item;
+            item.offset = compressed_data.size() - compressed_block.size() - 4 * sizeof(uint16_t); // 减去块头信息的大小
+            item.size = compressed_block.size() + 4 * sizeof(uint16_t); // 包括块头信息的大小
+            // 生成键
+            // BEVCompressor::CacheKey key = {timestamp, (uint16_t)i, (uint16_t)j};
+            // 添加到缓存映射
+            block_meta_map[CacheKey{timestamp, i, j}] = std::move(item);
         }
+    }
     // }
     // std::cout << "Compressed " << compressed_data.size() << " bytes." << std::endl;
     return compressed_data;
@@ -183,8 +189,7 @@ BEVFeaturePacket BEVCompressor::decompress_complete_block(const std::vector<uint
     if (ptr + sizeof(uint16_t) > end) {
         throw std::runtime_error("压缩数据不完整：缺少block数量");
     }
-    // uint16_t nums_blocks = *reinterpret_cast<const uint16_t*>(ptr);
-    uint16_t nums_blocks = 256;
+    uint16_t nums_blocks = *reinterpret_cast<const uint16_t*>(ptr);
     std::cout << "nums_blocks:" << nums_blocks << std::endl;
     ptr += sizeof(uint16_t);
 
@@ -196,13 +201,16 @@ BEVFeaturePacket BEVCompressor::decompress_complete_block(const std::vector<uint
     for (int i=0; i<nums_blocks; ++i) { // 块头包含4个uint16_t
         // 读取块头（行偏移、列偏移、块行数、压缩大小）
         uint16_t row_offset = *reinterpret_cast<const uint16_t*>(ptr);
-        std::cout << "row_offset: " << row_offset << std::endl;
+        // std::cout << "row_offset: " << row_offset << std::endl;
         ptr += sizeof(uint16_t);
         uint16_t col_offset = *reinterpret_cast<const uint16_t*>(ptr);
+        // std::cout << "col_offset: " << col_offset << std::endl;
         ptr += sizeof(uint16_t);
         uint16_t block_rows = *reinterpret_cast<const uint16_t*>(ptr);
+        // std::cout << "block_rows: " << block_rows << std::endl;
         ptr += sizeof(uint16_t);
         uint16_t block_size = *reinterpret_cast<const uint16_t*>(ptr);
+        // std::cout << "block_size: " << block_size << std::endl;
         ptr += sizeof(uint16_t);
         
         // std::cout << block_rows << std::endl;

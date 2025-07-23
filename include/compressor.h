@@ -10,7 +10,7 @@ public:
     struct Config {
         int block_size = 16;          // 分块大小
         float compression_ratio = 5.0f; // 目标压缩比
-        bool lossless = false;        // 无损模式开关
+        bool lossless = true;        // 无损模式开关
         const int ZFP_MODE_LOSSLESS = 0;  // 无损模式
         const int ZFP_MODE_DEFAULT = 1;   // 默认（有损）模式
     };
